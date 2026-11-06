@@ -1,4 +1,4 @@
-# Builds the MSIX package for Chain Calculator.
+# Builds the MSIX package for Chain Calc.
 #
 #   .\packaging\pack.ps1                     unsigned .msix for Store upload (the Store signs it)
 #   .\packaging\pack.ps1 -Version 1.0.1.0    bump the package version (the last part must stay 0 for the Store)
@@ -60,7 +60,7 @@ if ($Sign) {
     $cert = Get-ChildItem Cert:\CurrentUser\My | Where-Object { $_.Subject -eq $publisher -and $_.NotAfter -gt (Get-Date) } | Select-Object -First 1
     if (-not $cert) {
         $cert = New-SelfSignedCertificate -Type Custom -Subject $publisher -KeyUsage DigitalSignature `
-            -CertStoreLocation Cert:\CurrentUser\My -FriendlyName 'Chain Calculator test signing' `
+            -CertStoreLocation Cert:\CurrentUser\My -FriendlyName 'Chain Calc test signing' `
             -TextExtension @('2.5.29.37={text}1.3.6.1.5.5.7.3.3', '2.5.29.19={text}')
     }
     Invoke-Tool signtool.exe sign /fd SHA256 /sha1 $cert.Thumbprint $msix
