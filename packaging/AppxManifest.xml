@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   MSIX manifest for Chain Calc.
-  Before submitting to the Microsoft Store, replace Identity Name, Identity Publisher
-  and PublisherDisplayName with the values Partner Center shows under
-  Product management > Product identity once the app name is reserved.
+  Identity Name, Identity Publisher and PublisherDisplayName must match Partner Center
+  (Product management > Product identity) exactly, including the "Akward" spelling.
+  Store ID 9NS3M6ZN477C, package family name AkwardSnail.ChainCalc_ktfm57pxn63ft.
   pack.ps1 sets Identity Version from its -Version parameter.
 -->
 <Package
@@ -13,14 +13,14 @@
   IgnorableNamespaces="uap rescap">
 
   <Identity
-    Name="fdimer.ChainCalculator"
-    Publisher="CN=fdimer"
+    Name="AkwardSnail.ChainCalc"
+    Publisher="CN=A55585C2-FE40-4ED1-9B77-46466AE9C532"
     Version="1.0.0.0"
     ProcessorArchitecture="x64" />
 
   <Properties>
     <DisplayName>Chain Calc</DisplayName>
-    <PublisherDisplayName>fdimer</PublisherDisplayName>
+    <PublisherDisplayName>Akward Snail</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
   </Properties>
 
