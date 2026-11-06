@@ -5,4 +5,7 @@
   <Folder Name="/tests/">
     <Project Path="tests/ChainCalculator.Tests/ChainCalculator.Tests.csproj" />
   </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/StoreScreenshots/StoreScreenshots.csproj" />
+  </Folder>
 </Solution>
