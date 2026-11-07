@@ -1,50 +1,41 @@
-# Generates the app icon (a green + on black) at every size the MSIX package
-# and the .exe need. Re-run after changing the colours or proportions.
+# Generates the Awkward sn@ail app icon ("sn@" plus a block cursor, green on
+# black) at every size the MSIX package and the .exe need, by resizing
+# packaging\icon-master.png (2048 x 2048). Re-run after replacing the master.
 #   packaging\Assets\*.png      MSIX logos, tiles and splash screen
 #   src\ChainCalculator\app.ico icon embedded in the .exe and shown on the window
 
 Add-Type -AssemblyName System.Drawing
 
-$Background = [System.Drawing.Color]::Black
-$Plus = [System.Drawing.ColorTranslator]::FromHtml('#39FF7A')
+$Background = [System.Drawing.ColorTranslator]::FromHtml('#0D0F0C')
 
 $root = Split-Path -Parent $PSScriptRoot
 $assets = Join-Path $PSScriptRoot 'Assets'
 New-Item -ItemType Directory -Force $assets | Out-Null
+$master = [System.Drawing.Image]::FromFile((Join-Path $PSScriptRoot 'icon-master.png'))
 
-# Draws a black canvas with a centred +. $scale is the plus arm length as a
-# fraction of the shorter side. Edges are snapped to whole pixels so the
-# small sizes stay crisp.
-function New-PlusBitmap([int]$width, [int]$height, [double]$scale) {
+# Draws the master icon centred on a background-coloured canvas. $scale is the
+# icon's size as a fraction of the canvas's shorter side.
+function New-IconBitmap([int]$width, [int]$height, [double]$scale) {
     $bmp = New-Object System.Drawing.Bitmap $width, $height
     $g = [System.Drawing.Graphics]::FromImage($bmp)
     $g.Clear($Background)
-    $brush = New-Object System.Drawing.SolidBrush $Plus
-
-    $side = [Math]::Min($width, $height)
-    $length = [int][Math]::Round($side * $scale)
-    $thickness = [Math]::Max(2, [int][Math]::Round($length * 0.22))
-    # Matching parity with the canvas keeps the plus exactly centred.
-    if (($length % 2) -ne ($side % 2)) { $length++ }
-    if (($thickness % 2) -ne ($side % 2)) { $thickness++ }
-
-    $cx = [int](($width - $thickness) / 2)
-    $cy = [int](($height - $thickness) / 2)
-    $g.FillRectangle($brush, $cx, [int](($height - $length) / 2), $thickness, $length)
-    $g.FillRectangle($brush, [int](($width - $length) / 2), $cy, $length, $thickness)
-
-    $brush.Dispose(); $g.Dispose()
+    $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+    $g.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
+    $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::HighQuality
+    $side = [int][Math]::Round([Math]::Min($width, $height) * $scale)
+    $g.DrawImage($master, [int](($width - $side) / 2), [int](($height - $side) / 2), $side, $side)
+    $g.Dispose()
     return $bmp
 }
 
 function Save-Png([string]$name, [int]$width, [int]$height, [double]$scale) {
-    $bmp = New-PlusBitmap $width $height $scale
+    $bmp = New-IconBitmap $width $height $scale
     $bmp.Save((Join-Path $assets $name), [System.Drawing.Imaging.ImageFormat]::Png)
     $bmp.Dispose()
 }
 
-$iconScale = 0.7   # app list, taskbar, store logo, .ico
-$tileScale = 0.5   # Start menu tiles and splash leave more breathing room
+$iconScale = 1.0   # app list, taskbar, store logo, .ico (the master already has its margin)
+$tileScale = 0.6   # Start menu tiles and splash leave more breathing room
 
 foreach ($s in 100, 200, 400) {
     $f = $s / 100
@@ -64,7 +55,7 @@ foreach ($t in 16, 24, 32, 48, 256) {
 # .ico with PNG-compressed entries (supported since Windows Vista).
 $sizes = 16, 24, 32, 48, 256
 $images = foreach ($size in $sizes) {
-    $bmp = New-PlusBitmap $size $size $iconScale
+    $bmp = New-IconBitmap $size $size $iconScale
     $ms = New-Object System.IO.MemoryStream
     $bmp.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png)
     $bmp.Dispose()
@@ -84,5 +75,6 @@ for ($i = 0; $i -lt $sizes.Count; $i++) {
 foreach ($img in $images) { $w.Write($img) }
 [System.IO.File]::WriteAllBytes((Join-Path $root 'src\ChainCalculator\app.ico'), $out.ToArray())
 $w.Dispose()
+$master.Dispose()
 
 "Icons written to $assets and src\ChainCalculator\app.ico"
