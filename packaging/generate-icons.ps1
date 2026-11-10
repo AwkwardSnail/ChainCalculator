@@ -53,12 +53,23 @@ foreach ($t in 16, 24, 32, 48, 256) {
 }
 
 # .ico with PNG-compressed entries (supported since Windows Vista).
+# The PNGs must be 32-bit RGBA: Windows' icon decoder rejects RGB PNGs inside
+# an .ico, and WPF then crashes loading the window icon. System.Drawing drops
+# the alpha channel when every pixel is opaque, so re-encode through WPF as BGRA.
+Add-Type -AssemblyName PresentationCore
 $sizes = 16, 24, 32, 48, 256
 $images = foreach ($size in $sizes) {
     $bmp = New-IconBitmap $size $size $iconScale
-    $ms = New-Object System.IO.MemoryStream
-    $bmp.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png)
+    $gdiPng = New-Object System.IO.MemoryStream
+    $bmp.Save($gdiPng, [System.Drawing.Imaging.ImageFormat]::Png)
     $bmp.Dispose()
+    $gdiPng.Position = 0
+    $frame = [System.Windows.Media.Imaging.BitmapFrame]::Create($gdiPng, 'None', 'OnLoad')
+    $bgra = New-Object System.Windows.Media.Imaging.FormatConvertedBitmap($frame, [System.Windows.Media.PixelFormats]::Bgra32, $null, 0)
+    $encoder = New-Object System.Windows.Media.Imaging.PngBitmapEncoder
+    $encoder.Frames.Add([System.Windows.Media.Imaging.BitmapFrame]::Create($bgra))
+    $ms = New-Object System.IO.MemoryStream
+    $encoder.Save($ms)
     , $ms.ToArray()
 }
 $out = New-Object System.IO.MemoryStream
