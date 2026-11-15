@@ -77,8 +77,9 @@ public sealed record MathBrackets(MathNode Inner) : MathNode;
 
 /// <summary>
 /// Evaluates the cells as one sum, read top to bottom, using normal maths order:
-/// × and ÷ before + and −, so 1 + 1 + 1 ÷ 2 is 2.5. The sum starts at 0, so
-/// the first cell's operation applies to 0. A cell with "(" starts a bracket
+/// × and ÷ before + and −, so 1 + 1 + 1 ÷ 2 is 2.5. The first number starts
+/// the sum: its − makes it negative, and its + × or ÷ have nothing to act on,
+/// so they're ignored (no "0 ÷ …"). A cell with "(" starts a bracket
 /// at that cell's number (its operation applies to the whole bracket), which
 /// runs until a cell with ")" or, if there is none, the last cell. Brackets can
 /// nest. A ")" with no open bracket, and brackets on empty cells, are ignored.
@@ -178,20 +179,27 @@ public static class ChainEngine
         return top;
     }
 
-    // Evaluates "0 op1 t1 op2 t2 …" with × and ÷ before + and −: + and − start
+    // Evaluates "t1 op2 t2 op3 t3 …" with × and ÷ before + and −: + and − start
     // a new term, × and ÷ work on the current term, and the terms are summed.
     private static double Evaluate(List<Step> steps)
     {
         double sum = 0;
-        double term = 0;   // the leading 0 the sum starts from
-        foreach (var step in steps)
+        double term = 0;
+        for (int i = 0; i < steps.Count; i++)
         {
+            var step = steps[i];
             double value = step.Term switch
             {
                 NumberTerm n => Parse(n.Text),
                 GroupTerm g => Evaluate(g.Steps),
                 _ => throw new ArgumentOutOfRangeException(nameof(steps)),
             };
+            if (i == 0)
+            {
+                // The first number starts the sum; only − changes it.
+                term = step.Operation == Operation.Subtract ? -value : value;
+                continue;
+            }
             switch (step.Operation)
             {
                 case Operation.Add: sum += term; term = value; break;
@@ -216,14 +224,8 @@ public static class ChainEngine
 
             if (expression.Length == 0)
             {
-                // Each sum (and each bracket) starts at 0: "+ 7" is just 7 and
-                // "− 7" is −7, but × and ÷ act on that 0, so it has to be shown.
-                expression = step.Operation switch
-                {
-                    Operation.Add => operand,
-                    Operation.Subtract => "−" + Bracketed(operand),
-                    _ => $"0 {step.Operation.Symbol()} {Bracketed(operand)}",
-                };
+                // The first number starts the sum; only a − is shown.
+                expression = step.Operation == Operation.Subtract ? "−" + Bracketed(operand) : operand;
                 continue;
             }
             expression = $"{expression} {step.Operation.Symbol()} {Bracketed(operand)}";
@@ -232,47 +234,72 @@ public static class ChainEngine
     }
 
     // Builds the display layout for one sum (the whole calculation or one
-    // bracket): + and − separate terms; within a term × joins factors side by
-    // side and ÷ puts everything so far in the term over the divisor.
+    // bracket): + and − separate terms. Within a term, everything multiplied
+    // goes on top and everything divided by goes underneath, as one fraction:
+    // a × b ÷ c ÷ d shows as a × b over c × d, never a tower of fractions.
     private static MathNode Layout(List<Step> steps)
     {
         var row = new List<MathNode>();
-        MathNode? term = null;
-        foreach (var step in steps)
+        var top = new List<MathNode>();
+        var bottom = new List<MathNode>();
+        for (int i = 0; i < steps.Count; i++)
         {
-            if (term is null)
+            var step = steps[i];
+            if (i == 0)
             {
-                // The sum starts at 0: "+ 7" is 7, "− 7" is −7, and × or ÷ act
-                // on the 0, so it's shown.
-                if (step.Operation == Operation.Add) { term = LayoutOperand(step.Term, afterOperator: false); continue; }
-                if (step.Operation == Operation.Subtract)
-                {
-                    row.Add(new MathText("−", IsOperator: true));
-                    term = LayoutOperand(step.Term, afterOperator: true);
-                    continue;
-                }
-                term = new MathText("0");
+                // The first number starts the sum; only a − is shown.
+                if (step.Operation == Operation.Subtract) row.Add(new MathText("−", IsOperator: true));
+                top.Add(LayoutOperand(step.Term, afterOperator: step.Operation == Operation.Subtract));
+                continue;
             }
 
             switch (step.Operation)
             {
                 case Operation.Add or Operation.Subtract:
-                    row.Add(term);
+                    row.Add(TermLayout(top, bottom));
                     row.Add(new MathText(step.Operation.Symbol(), IsOperator: true));
-                    term = LayoutOperand(step.Term, afterOperator: true);
+                    top = [LayoutOperand(step.Term, afterOperator: true)];
+                    bottom = [];
                     break;
                 case Operation.Multiply:
-                    var factor = LayoutOperand(step.Term, afterOperator: true);
-                    var sign = new MathText("×", IsOperator: true);
-                    term = term is MathRow r ? new MathRow([.. r.Items, sign, factor]) : new MathRow([term, sign, factor]);
+                    top.Add(LayoutOperand(step.Term, afterOperator: true));
                     break;
                 case Operation.Divide:
-                    term = new MathFraction(Unbracketed(term), Unbracketed(LayoutOperand(step.Term, afterOperator: false)));
+                    bottom.Add(LayoutOperand(step.Term, afterOperator: true));
                     break;
             }
         }
-        row.Add(term!);
+        row.Add(TermLayout(top, bottom));
         return row.Count == 1 ? row[0] : new MathRow(row);
+    }
+
+    // One term: its factors joined by ×, as a fraction if anything divides it.
+    // A lone bracket on top or underneath loses its brackets, since the bar
+    // already groups it.
+    private static MathNode TermLayout(List<MathNode> top, List<MathNode> bottom)
+    {
+        if (bottom.Count == 0) return Product(top);
+        return new MathFraction(Unbracketed(Product(top)), Unbracketed(Product(bottom)));
+    }
+
+    // A lone negative number under the bar needs no brackets: "−3", not "(−3)".
+    private static MathNode Unbracketed(MathNode node) => node switch
+    {
+        MathBrackets b => b.Inner,
+        MathText { IsOperator: false } t when t.Text.StartsWith("(−") || t.Text.StartsWith("(-") => t with { Text = t.Text[1..^1] },
+        _ => node,
+    };
+
+    private static MathNode Product(List<MathNode> factors)
+    {
+        if (factors.Count == 1) return factors[0];
+        var items = new List<MathNode>();
+        foreach (var factor in factors)
+        {
+            if (items.Count > 0) items.Add(new MathText("×", IsOperator: true));
+            items.Add(factor);
+        }
+        return new MathRow(items);
     }
 
     private static MathNode LayoutOperand(Term term, bool afterOperator) => term switch
@@ -281,8 +308,6 @@ public static class ChainEngine
         GroupTerm g => new MathBrackets(Layout(g.Steps)),
         _ => throw new ArgumentOutOfRangeException(nameof(term)),
     };
-
-    private static MathNode Unbracketed(MathNode node) => node is MathBrackets b ? b.Inner : node;
 
     // Numbers are tidied the same way as results ("5.0" → "5") with a proper
     // minus sign; anything that doesn't parse is shown as the user typed it.

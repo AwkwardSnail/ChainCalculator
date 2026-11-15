@@ -18,10 +18,24 @@ public class ChainEngineTests
     }
 
     [Fact]
-    public void ChainStartsAtZero()
+    public void FirstNumberStartsTheSum()
     {
         Assert.Equal(-4, Run((Subtract, "4"))[^1]);
-        Assert.Equal(0, Run((Multiply, "7"))[^1]);
+        // × or ÷ on the first number has nothing to act on, so it's ignored.
+        Assert.Equal(7, Run((Multiply, "7"))[^1]);
+        // An empty first cell doesn't count: the first number is in cell 2.
+        Assert.Equal([0, 1, 2], Run((Divide, ""), (Divide, "1"), (Multiply, "2")));
+    }
+
+    [Fact]
+    public void ReportedExampleDividesByTheBracket()
+    {
+        // ÷1, ÷1, ÷(1, +1), ÷1 once gave 0 because the first ÷ acted on a starting 0.
+        var cells = Bracketed((Divide, Bracket.None, "1"), (Divide, Bracket.None, "1"), (Divide, Bracket.Open, "1"),
+            (Add, Bracket.Close, "1"), (Divide, Bracket.None, "1"));
+        Assert.Equal([1, 1, 1, 0.5, 0.5], ChainEngine.Evaluate(cells));
+        Assert.Equal("1 ÷ 1 ÷ (1 + 1) ÷ 1", ChainEngine.Expression(cells));
+        Assert.Equal("[1 / 1 × (1 + 1) × 1]", Describe(ChainEngine.Layout(cells)));
     }
 
     [Fact]
@@ -95,7 +109,7 @@ public class ChainEngineTests
     {
         Assert.Equal("7", Expr((Add, "7")));
         Assert.Equal("−7 × 2", Expr((Subtract, "7"), (Multiply, "2")));
-        Assert.Equal("0 × 7 + 1", Expr((Multiply, "7"), (Add, "1")));
+        Assert.Equal("7 + 1", Expr((Multiply, "7"), (Add, "1")));
     }
 
     [Fact]
@@ -216,8 +230,8 @@ public class ChainEngineTests
         Assert.Equal("1 + 1 + [1 / 2]", Laid((Add, Bracket.None, "1"), (Add, Bracket.None, "1"), (Add, Bracket.None, "1"), (Divide, Bracket.None, "2")));
         // The numerator is the whole product since the last + or −.
         Assert.Equal("10 + [5 × 3 / 9]", Laid((Add, Bracket.None, "10"), (Add, Bracket.None, "5"), (Multiply, Bracket.None, "3"), (Divide, Bracket.None, "9")));
-        // Dividing again divides the fraction; multiplying after sits beside it.
-        Assert.Equal("[[8 / 2] / 2] × 3", Laid((Add, Bracket.None, "8"), (Divide, Bracket.None, "2"), (Divide, Bracket.None, "2"), (Multiply, Bracket.None, "3")));
+        // Every divisor in a term goes on one denominator; every factor on top.
+        Assert.Equal("[8 × 3 / 2 × 2]", Laid((Add, Bracket.None, "8"), (Divide, Bracket.None, "2"), (Divide, Bracket.None, "2"), (Multiply, Bracket.None, "3")));
         Assert.Equal("", Laid((Add, Bracket.None, "")));
     }
 
@@ -234,7 +248,8 @@ public class ChainEngineTests
     [Fact]
     public void LayoutKeepsTheStartingZeroAndNegativeBrackets()
     {
-        Assert.Equal("[0 / 7]", Laid((Divide, Bracket.None, "7")));
+        Assert.Equal("7", Laid((Divide, Bracket.None, "7")));
+        Assert.Equal("[6 / 2 × (−3)]", Laid((Add, Bracket.None, "6"), (Divide, Bracket.None, "2"), (Divide, Bracket.None, "-3")));
         Assert.Equal("− 7 × 2", Laid((Subtract, Bracket.None, "7"), (Multiply, Bracket.None, "2")));
         Assert.Equal("[10 / −3] − (−1)", Laid((Add, Bracket.None, "10"), (Divide, Bracket.None, "-3"), (Subtract, Bracket.None, "-1")));
     }
