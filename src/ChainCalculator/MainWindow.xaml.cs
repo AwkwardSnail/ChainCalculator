@@ -67,7 +67,8 @@ public partial class MainWindow : Window
 
     private void Recalculate()
     {
-        var running = ChainEngine.Evaluate(_rows.Select(r => new Cell(r.Operation, r.Input.Text)).ToList());
+        var cells = _rows.Select(r => new Cell(r.Operation, r.Input.Text)).ToList();
+        var running = ChainEngine.Evaluate(cells);
         var green = (Brush)FindResource("GreenBrush");
         var greenDim = (Brush)FindResource("GreenDimBrush");
         var error = (Brush)FindResource("ErrorBrush");
@@ -83,6 +84,10 @@ public partial class MainWindow : Window
         double result = running[^1];
         ResultText.Text = ChainEngine.Format(result);
         ResultText.Foreground = double.IsNaN(result) ? error : green;
+
+        string expression = ChainEngine.Expression(cells);
+        ExpressionText.Text = expression.Length == 0 ? "" : $"{expression} = {ChainEngine.Format(result)}";
+        ExpressionText.Foreground = double.IsNaN(result) ? error : greenDim;
     }
 
     private void ClearButton_Click(object sender, RoutedEventArgs e)

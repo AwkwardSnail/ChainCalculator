@@ -61,6 +61,57 @@ public static class ChainEngine
         return running;
     }
 
+    /// <summary>
+    /// Writes the chain as one expression, e.g. "(10 + 5) × 3 ÷ 9". The chain
+    /// works top to bottom, but ordinary maths does × and ÷ before + and −, so
+    /// the part above a × or ÷ is bracketed whenever it ends in + or −; that way
+    /// the expression gives the same answer read either way. Empty cells are
+    /// left out; text that isn't a number is shown as typed. Returns "" when
+    /// every cell is empty.
+    /// </summary>
+    public static string Expression(IReadOnlyList<Cell> cells)
+    {
+        string expression = "";
+        bool endsInAddOrSubtract = false;
+        foreach (var cell in cells)
+        {
+            if (string.IsNullOrWhiteSpace(cell.Text)) continue;
+            string operand = FormatOperand(cell.Text);
+            bool addOrSubtract = cell.Operation is Operation.Add or Operation.Subtract;
+
+            if (expression.Length == 0)
+            {
+                // The chain starts at 0: "+ 7" is just 7 and "− 7" is −7, but
+                // × and ÷ act on that 0, so it has to be shown.
+                expression = cell.Operation switch
+                {
+                    Operation.Add => operand,
+                    Operation.Subtract => "−" + Bracketed(operand),
+                    _ => $"0 {cell.Operation.Symbol()} {Bracketed(operand)}",
+                };
+                endsInAddOrSubtract = false;
+                continue;
+            }
+
+            if (!addOrSubtract && endsInAddOrSubtract) expression = $"({expression})";
+            expression = $"{expression} {cell.Operation.Symbol()} {Bracketed(operand)}";
+            endsInAddOrSubtract = addOrSubtract;
+        }
+        return expression;
+    }
+
+    // Numbers are tidied the same way as results ("5.0" → "5") with a proper
+    // minus sign; anything that doesn't parse is shown as the user typed it.
+    private static string FormatOperand(string text)
+    {
+        double value = Parse(text);
+        return double.IsNaN(value) ? text.Trim() : Format(value).Replace('-', '−');
+    }
+
+    // Negative numbers after an operation read better in brackets: "10 − (−3)".
+    private static string Bracketed(string operand) =>
+        operand.StartsWith('−') || operand.StartsWith('-') ? $"({operand})" : operand;
+
     /// <summary>Parses a cell's text; empty is 0, anything that isn't a finite number is NaN.</summary>
     public static double Parse(string text)
     {

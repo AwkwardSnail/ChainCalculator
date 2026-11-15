@@ -75,4 +75,39 @@ public class ChainEngineTests
         Assert.Equal(Divide, Multiply.Next());
         Assert.Equal(Add, Divide.Next());
     }
+
+    private static string Expr(params (Operation Op, string Text)[] cells) =>
+        ChainEngine.Expression(cells.Select(c => new Cell(c.Op, c.Text)).ToList());
+
+    [Fact]
+    public void ExpressionBracketsSoNormalMathsGivesTheSameAnswer()
+    {
+        Assert.Equal("(10 + 5) × 3 ÷ 9", Expr((Add, "10"), (Add, "5"), (Multiply, "3"), (Divide, "9"), (Add, "")));
+        Assert.Equal("((2 + 3) × 4 − 1) × 2", Expr((Add, "2"), (Add, "3"), (Multiply, "4"), (Subtract, "1"), (Multiply, "2")));
+        Assert.Equal("2 × 3 + 4", Expr((Add, "2"), (Multiply, "3"), (Add, "4")));
+        Assert.Equal("8 − 2 − 1", Expr((Add, "8"), (Subtract, "2"), (Subtract, "1")));
+    }
+
+    [Fact]
+    public void ExpressionShowsTheStartingZeroOnlyWhenItMatters()
+    {
+        Assert.Equal("7", Expr((Add, "7")));
+        Assert.Equal("−7 × 2", Expr((Subtract, "7"), (Multiply, "2")));
+        Assert.Equal("0 × 7 + 1", Expr((Multiply, "7"), (Add, "1")));
+    }
+
+    [Fact]
+    public void ExpressionSkipsEmptyCellsAndBracketsNegatives()
+    {
+        Assert.Equal("", Expr((Add, ""), (Multiply, " ")));
+        Assert.Equal("10 − (−3)", Expr((Add, ""), (Add, "10"), (Divide, ""), (Subtract, "-3")));
+        Assert.Equal("−3 + 2.5", Expr((Add, " -3 "), (Add, "2.50")));
+    }
+
+    [Fact]
+    public void ExpressionShowsBadInputAsTyped()
+    {
+        Assert.Equal("12 ÷ 0", Expr((Add, "12"), (Divide, "0")));
+        Assert.Equal("4 + abc", Expr((Add, "4"), (Add, " abc ")));
+    }
 }

@@ -38,6 +38,15 @@
                 <TextBlock FontWeight="Bold" Text="Result" />
             </DockPanel>
 
+            <!-- The whole chain as one expression; wraps if it's long. -->
+            <TextBlock x:Name="ExpressionText"
+                       Margin="0,6,0,0"
+                       FontSize="14pt"
+                       TextAlignment="Right"
+                       TextWrapping="Wrap"
+                       Foreground="{StaticResource GreenDimBrush}"
+                       AutomationProperties.Name="Calculation" />
+
             <Button x:Name="ClearButton"
                     Margin="0,16,0,0"
                     HorizontalAlignment="Right"
