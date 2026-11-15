@@ -108,6 +108,26 @@ public partial class MainWindow : Window
         string expression = ChainEngine.Expression(cells);
         ExpressionText.Text = expression.Length == 0 ? "" : $"{expression} = {ChainEngine.Format(result)}";
         ExpressionText.Foreground = double.IsNaN(result) ? error : greenDim;
+
+        // "Copied" only describes what's on the clipboard until something changes.
+        CopyButton.Content = "Copy results";
+    }
+
+    private void CopyButton_Click(object sender, RoutedEventArgs e)
+    {
+        // The whole calculation, e.g. "240 ÷ (4 + 2) − 15 = 25", or just the
+        // result when every cell is empty.
+        string text = ExpressionText.Text.Length > 0 ? ExpressionText.Text : ResultText.Text;
+        try
+        {
+            Clipboard.SetDataObject(text, copy: true);
+            CopyButton.Content = "Copied";
+        }
+        catch (System.Runtime.InteropServices.COMException)
+        {
+            // Another app has the clipboard open; leave the label as it is so
+            // it doesn't claim a copy that didn't happen.
+        }
     }
 
     private void ClearButton_Click(object sender, RoutedEventArgs e)

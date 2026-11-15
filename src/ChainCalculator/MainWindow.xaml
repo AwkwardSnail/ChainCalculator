@@ -49,12 +49,19 @@
                        Foreground="{StaticResource GreenDimBrush}"
                        AutomationProperties.Name="Calculation" />
 
-            <Button x:Name="ClearButton"
-                    Margin="0,16,0,0"
-                    HorizontalAlignment="Right"
-                    Style="{StaticResource ClearButton}"
-                    Content="Clear"
-                    Click="ClearButton_Click" />
+            <StackPanel Margin="0,16,0,0" HorizontalAlignment="Right" Orientation="Horizontal">
+                <Button x:Name="CopyButton"
+                        Margin="0,0,12,0"
+                        MinWidth="150"
+                        Style="{StaticResource ClearButton}"
+                        Content="Copy results"
+                        ToolTip="Copy the calculation and result"
+                        Click="CopyButton_Click" />
+                <Button x:Name="ClearButton"
+                        Style="{StaticResource ClearButton}"
+                        Content="Clear"
+                        Click="ClearButton_Click" />
+            </StackPanel>
         </StackPanel>
     </Border>
 </Window>

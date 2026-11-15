@@ -8,10 +8,13 @@ public class ChainEngineTests
         ChainEngine.Evaluate(cells.Select(c => new Cell(c.Op, c.Text)).ToList());
 
     [Fact]
-    public void AppliesEachOperationToTheRunningResult()
+    public void MultiplyAndDivideComeBeforeAddAndSubtract()
     {
-        var running = Run((Add, "10"), (Add, "5"), (Multiply, "3"), (Divide, "9"), (Add, ""));
-        Assert.Equal([10, 15, 45, 5, 5], running);
+        // 1 + 1 + 1 ÷ 2 = 2.5, not (1 + 1 + 1) ÷ 2.
+        Assert.Equal([1, 2, 3, 2.5], Run((Add, "1"), (Add, "1"), (Add, "1"), (Divide, "2")));
+        // 10 + 5 × 3 ÷ 6: the running result is the sum so far.
+        Assert.Equal([10, 15, 25, 12.5, 12.5], Run((Add, "10"), (Add, "5"), (Multiply, "3"), (Divide, "6"), (Add, "")));
+        Assert.Equal(-10, Run((Add, "2"), (Subtract, "3"), (Multiply, "4"))[^1]);
     }
 
     [Fact]
@@ -80,11 +83,10 @@ public class ChainEngineTests
         ChainEngine.Expression(cells.Select(c => new Cell(c.Op, c.Text)).ToList());
 
     [Fact]
-    public void ExpressionBracketsSoNormalMathsGivesTheSameAnswer()
+    public void ExpressionAddsNoBracketsOfItsOwn()
     {
-        Assert.Equal("(10 + 5) × 3 ÷ 9", Expr((Add, "10"), (Add, "5"), (Multiply, "3"), (Divide, "9"), (Add, "")));
-        Assert.Equal("((2 + 3) × 4 − 1) × 2", Expr((Add, "2"), (Add, "3"), (Multiply, "4"), (Subtract, "1"), (Multiply, "2")));
-        Assert.Equal("2 × 3 + 4", Expr((Add, "2"), (Multiply, "3"), (Add, "4")));
+        Assert.Equal("1 + 1 + 1 ÷ 2", Expr((Add, "1"), (Add, "1"), (Add, "1"), (Divide, "2")));
+        Assert.Equal("10 + 5 × 3 ÷ 9", Expr((Add, "10"), (Add, "5"), (Multiply, "3"), (Divide, "9"), (Add, "")));
         Assert.Equal("8 − 2 − 1", Expr((Add, "8"), (Subtract, "2"), (Subtract, "1")));
     }
 
@@ -127,9 +129,18 @@ public class ChainEngineTests
     public void OpenBracketClosesAtTheEndUnlessClosedEarlier()
     {
         var cells = Bracketed((Add, Bracket.None, "100"), (Subtract, Bracket.Open, "10"), (Add, Bracket.None, "5"), (Multiply, Bracket.None, "2"));
-        // 100 − ((10 + 5) × 2) = 70
-        Assert.Equal(70, ChainEngine.Evaluate(cells)[^1]);
-        Assert.Equal("100 − ((10 + 5) × 2)", ChainEngine.Expression(cells));
+        // 100 − (10 + 5 × 2) = 80: normal order applies inside the bracket too.
+        Assert.Equal([100, 90, 85, 80], ChainEngine.Evaluate(cells));
+        Assert.Equal("100 − (10 + 5 × 2)", ChainEngine.Expression(cells));
+    }
+
+    [Fact]
+    public void BracketsGiveTheOldTopToBottomOrderWhenWanted()
+    {
+        // (1 + 1 + 1) ÷ 2
+        var cells = Bracketed((Add, Bracket.Open, "1"), (Add, Bracket.None, "1"), (Add, Bracket.Close, "1"), (Divide, Bracket.None, "2"));
+        Assert.Equal(1.5, ChainEngine.Evaluate(cells)[^1]);
+        Assert.Equal("(1 + 1 + 1) ÷ 2", ChainEngine.Expression(cells));
     }
 
     [Fact]
@@ -138,8 +149,8 @@ public class ChainEngineTests
         var cells = Bracketed((Add, Bracket.None, "1"), (Divide, Bracket.Open, "2"), (Add, Bracket.None, "3"),
             (Divide, Bracket.Open, "4"), (Add, Bracket.Close, "4"));
         // 1 ÷ (2 + 3 ÷ (4 + 4)): the inner bracket closes at the last cell, the outer at the end.
-        Assert.Equal(1 / (5 / 8.0), ChainEngine.Evaluate(cells)[^1], 12);
-        Assert.Equal("1 ÷ ((2 + 3) ÷ (4 + 4))", ChainEngine.Expression(cells));
+        Assert.Equal(1 / (2 + 3 / 8.0), ChainEngine.Evaluate(cells)[^1], 12);
+        Assert.Equal("1 ÷ (2 + 3 ÷ (4 + 4))", ChainEngine.Expression(cells));
     }
 
     [Fact]

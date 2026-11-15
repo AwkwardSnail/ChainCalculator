@@ -27,11 +27,11 @@ internal static class Program
     private static readonly Shot[] Shots =
     [
         new("01-chain.png", "Every cell picks its own operation",
-            [(0, "10"), (0, "5"), (2, "3"), (3, "9"), (0, "")]),
+            [(0, "(10"), (0, "5)"), (2, "3"), (3, "9"), (0, "")]),
         new("02-running.png", "See the running result at every step",
             [(0, "1200"), (3, "12"), (2, "1.1"), (0, "25"), (1, "35")]),
         new("03-decimals.png", "Five cells, one result",
-            [(0, "19.99"), (2, "3"), (1, "4.97"), (3, "2"), (0, "0.5")]),
+            [(0, "(19.99"), (2, "3"), (1, "4.97)"), (3, "2"), (0, "0.5")]),
         new("04-brackets.png", "Brackets when you need them",
             [(0, "240"), (3, "(4"), (0, "2)"), (1, "15"), (0, "")]),
     ];

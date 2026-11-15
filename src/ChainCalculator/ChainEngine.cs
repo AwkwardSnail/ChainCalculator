@@ -61,13 +61,13 @@ public static class BracketExtensions
 public readonly record struct Cell(Operation Operation, string Text, Bracket Bracket = Bracket.None);
 
 /// <summary>
-/// Evaluates a chain of cells. The chain starts at 0 and each cell applies its
-/// operation to the running result of the cells above it. A cell with "(" starts
-/// a bracket: its operation is held back and applied to the result of the
-/// bracket, which starts from that cell's number and runs until a cell with ")"
-/// or, if there is none, the end of the chain. Brackets can nest. A ")" with no
-/// open bracket, and brackets on empty cells, are ignored. NaN marks an error
-/// (bad input or division by zero) and carries through to the end of the chain.
+/// Evaluates the cells as one sum, read top to bottom, using normal maths order:
+/// × and ÷ before + and −, so 1 + 1 + 1 ÷ 2 is 2.5. The sum starts at 0, so
+/// the first cell's operation applies to 0. A cell with "(" starts a bracket
+/// at that cell's number (its operation applies to the whole bracket), which
+/// runs until a cell with ")" or, if there is none, the last cell. Brackets can
+/// nest. A ")" with no open bracket, and brackets on empty cells, are ignored.
+/// NaN marks an error (bad input or division by zero) and carries through.
 /// </summary>
 public static class ChainEngine
 {
@@ -79,9 +79,9 @@ public static class ChainEngine
     private sealed record Step(Operation Operation, Term Term);
 
     /// <summary>
-    /// Returns the running result after each cell; the last one is the final
-    /// result. Inside an open bracket, a cell's running result is what the chain
-    /// would give if the bracket closed at that cell.
+    /// Returns the running result after each cell: the sum of that cell and the
+    /// ones above it. The last one is the final result. Inside an open bracket,
+    /// a cell's running result is what the sum gives if the bracket closed there.
     /// </summary>
     public static IReadOnlyList<double> Evaluate(IReadOnlyList<Cell> cells)
     {
@@ -94,12 +94,10 @@ public static class ChainEngine
     }
 
     /// <summary>
-    /// Writes the chain as one expression, e.g. "(10 + 5) × 3 ÷ 9". The chain
-    /// works top to bottom, but ordinary maths does × and ÷ before + and −, so
-    /// the part before a × or ÷ is bracketed whenever it ends in + or −; that way
-    /// the expression gives the same answer read either way. The user's own
-    /// brackets are always shown. Empty cells are left out; text that isn't a
-    /// number is shown as typed. Returns "" when every cell is empty.
+    /// Writes the cells as one expression, e.g. "240 ÷ (4 + 2) − 15", with only
+    /// the user's own brackets (and brackets round negative numbers after an
+    /// operation). Empty cells are left out; text that isn't a number is shown
+    /// as typed. Returns "" when every cell is empty.
     /// </summary>
     public static string Expression(IReadOnlyList<Cell> cells) => Render(Build(cells, cells.Count));
 
@@ -133,9 +131,12 @@ public static class ChainEngine
         return top;
     }
 
+    // Evaluates "0 op1 t1 op2 t2 …" with × and ÷ before + and −: + and − start
+    // a new term, × and ÷ work on the current term, and the terms are summed.
     private static double Evaluate(List<Step> steps)
     {
-        double result = 0;
+        double sum = 0;
+        double term = 0;   // the leading 0 the sum starts from
         foreach (var step in steps)
         {
             double value = step.Term switch
@@ -144,15 +145,19 @@ public static class ChainEngine
                 GroupTerm g => Evaluate(g.Steps),
                 _ => throw new ArgumentOutOfRangeException(nameof(steps)),
             };
-            result = step.Operation.Apply(result, value);
+            switch (step.Operation)
+            {
+                case Operation.Add: sum += term; term = value; break;
+                case Operation.Subtract: sum += term; term = -value; break;
+                default: term = step.Operation.Apply(term, value); break;
+            }
         }
-        return result;
+        return sum + term;
     }
 
     private static string Render(List<Step> steps)
     {
         string expression = "";
-        bool endsInAddOrSubtract = false;
         foreach (var step in steps)
         {
             string operand = step.Term switch
@@ -161,11 +166,10 @@ public static class ChainEngine
                 GroupTerm g => $"({Render(g.Steps)})",
                 _ => throw new ArgumentOutOfRangeException(nameof(steps)),
             };
-            bool addOrSubtract = step.Operation is Operation.Add or Operation.Subtract;
 
             if (expression.Length == 0)
             {
-                // Each chain (and each bracket) starts at 0: "+ 7" is just 7 and
+                // Each sum (and each bracket) starts at 0: "+ 7" is just 7 and
                 // "− 7" is −7, but × and ÷ act on that 0, so it has to be shown.
                 expression = step.Operation switch
                 {
@@ -173,13 +177,9 @@ public static class ChainEngine
                     Operation.Subtract => "−" + Bracketed(operand),
                     _ => $"0 {step.Operation.Symbol()} {Bracketed(operand)}",
                 };
-                endsInAddOrSubtract = false;
                 continue;
             }
-
-            if (!addOrSubtract && endsInAddOrSubtract) expression = $"({expression})";
             expression = $"{expression} {step.Operation.Symbol()} {Bracketed(operand)}";
-            endsInAddOrSubtract = addOrSubtract;
         }
         return expression;
     }
