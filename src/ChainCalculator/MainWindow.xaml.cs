@@ -77,7 +77,7 @@ public partial class MainWindow : Window
         };
         bracketButton.Click += (_, _) =>
         {
-            row.Bracket = row.Bracket.Next();
+            row.Bracket = ChainEngine.NextBracket(CurrentCells(), index);
             bracketButton.Content = row.Bracket.Symbol();
             Recalculate();
         };
@@ -85,9 +85,11 @@ public partial class MainWindow : Window
         return row;
     }
 
+    private List<Cell> CurrentCells() => _rows.Select(r => new Cell(r.Operation, r.Input.Text, r.Bracket)).ToList();
+
     private void Recalculate()
     {
-        var cells = _rows.Select(r => new Cell(r.Operation, r.Input.Text, r.Bracket)).ToList();
+        var cells = CurrentCells();
         var running = ChainEngine.Evaluate(cells);
         var green = (Brush)FindResource("GreenBrush");
         var greenDim = (Brush)FindResource("GreenDimBrush");
@@ -105,19 +107,71 @@ public partial class MainWindow : Window
         ResultText.Text = ChainEngine.Format(result);
         ResultText.Foreground = double.IsNaN(result) ? error : green;
 
+        // Copy results pastes as one line of text, e.g. "240 ÷ (4 + 2) − 15 = 25";
+        // on screen the same calculation shows divisions as fractions.
         string expression = ChainEngine.Expression(cells);
-        ExpressionText.Text = expression.Length == 0 ? "" : $"{expression} = {ChainEngine.Format(result)}";
-        ExpressionText.Foreground = double.IsNaN(result) ? error : greenDim;
+        _copyText = expression.Length == 0 ? ResultText.Text : $"{expression} = {ChainEngine.Format(result)}";
+        ShowExpression(ChainEngine.Layout(cells), result, double.IsNaN(result) ? error : greenDim);
+        System.Windows.Automation.AutomationProperties.SetName(ExpressionPanel, expression.Length == 0 ? "Calculation" : _copyText);
 
         // "Copied" only describes what's on the clipboard until something changes.
         CopyButton.Content = "Copy results";
     }
 
+    private string _copyText = "0";
+
+    // Shows "<layout> = <result>". The top-level terms go straight into the
+    // wrap panel so a long calculation wraps between them.
+    private void ShowExpression(MathNode? layout, double result, Brush brush)
+    {
+        ExpressionPanel.Children.Clear();
+        if (layout is null) return;
+        var items = layout is MathRow row ? row.Items : [layout];
+        foreach (var item in items) ExpressionPanel.Children.Add(Draw(item, brush));
+        ExpressionPanel.Children.Add(Draw(new MathText("=", IsOperator: true), brush));
+        ExpressionPanel.Children.Add(Draw(new MathText(ChainEngine.Format(result)), brush));
+    }
+
+    private static FrameworkElement Draw(MathNode node, Brush brush)
+    {
+        switch (node)
+        {
+            case MathText text:
+                return new TextBlock
+                {
+                    Text = text.Text,
+                    Foreground = brush,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Margin = text.IsOperator ? new Thickness(10, 0, 10, 0) : new Thickness(0),
+                };
+            case MathRow row:
+                var panel = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+                foreach (var item in row.Items) panel.Children.Add(Draw(item, brush));
+                return panel;
+            case MathBrackets brackets:
+                var group = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+                group.Children.Add(Draw(new MathText("("), brush));
+                group.Children.Add(Draw(brackets.Inner, brush));
+                group.Children.Add(Draw(new MathText(")"), brush));
+                return group;
+            case MathFraction fraction:
+                var numerator = Draw(fraction.Numerator, brush);
+                var denominator = Draw(fraction.Denominator, brush);
+                numerator.HorizontalAlignment = denominator.HorizontalAlignment = HorizontalAlignment.Center;
+                var stack = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(2, 2, 2, 2) };
+                stack.Children.Add(numerator);
+                // The bar spans the wider of numerator and denominator, with a little overhang.
+                stack.Children.Add(new Border { Height = 2, Background = brush, Margin = new Thickness(-2, 3, -2, 3) });
+                stack.Children.Add(denominator);
+                return stack;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(node));
+        }
+    }
+
     private void CopyButton_Click(object sender, RoutedEventArgs e)
     {
-        // The whole calculation, e.g. "240 ÷ (4 + 2) − 15 = 25", or just the
-        // result when every cell is empty.
-        string text = ExpressionText.Text.Length > 0 ? ExpressionText.Text : ResultText.Text;
+        string text = _copyText;
         try
         {
             Clipboard.SetDataObject(text, copy: true);

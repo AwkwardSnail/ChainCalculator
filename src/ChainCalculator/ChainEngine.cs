@@ -53,12 +53,27 @@ public static class BracketExtensions
         _ => throw new ArgumentOutOfRangeException(nameof(bracket)),
     };
 
-    /// <summary>The bracket the button moves to on the next click.</summary>
-    public static Bracket Next(this Bracket bracket) =>
-        (Bracket)(((int)bracket + 1) % Enum.GetValues<Bracket>().Length);
 }
 
 public readonly record struct Cell(Operation Operation, string Text, Bracket Bracket = Bracket.None);
+
+/// <summary>
+/// The calculation laid out for display, with divisions as stacked fractions.
+/// The window turns this into text and fraction bars.
+/// </summary>
+public abstract record MathNode;
+
+/// <summary>A number (or text the user typed) or an operator symbol.</summary>
+public sealed record MathText(string Text, bool IsOperator = false) : MathNode;
+
+/// <summary>Items shown side by side.</summary>
+public sealed record MathRow(IReadOnlyList<MathNode> Items) : MathNode;
+
+/// <summary>Numerator over a bar over denominator.</summary>
+public sealed record MathFraction(MathNode Numerator, MathNode Denominator) : MathNode;
+
+/// <summary>The user's own brackets round a part of the calculation.</summary>
+public sealed record MathBrackets(MathNode Inner) : MathNode;
 
 /// <summary>
 /// Evaluates the cells as one sum, read top to bottom, using normal maths order:
@@ -100,6 +115,38 @@ public static class ChainEngine
     /// as typed. Returns "" when every cell is empty.
     /// </summary>
     public static string Expression(IReadOnlyList<Cell> cells) => Render(Build(cells, cells.Count));
+
+    /// <summary>
+    /// The same calculation as <see cref="Expression"/>, laid out with each
+    /// division as a fraction: the numerator is everything multiplied or
+    /// divided since the last + or −, e.g. 1 + 1 + 1 ÷ 2 shows ½ for the last
+    /// part. Brackets that would wrap a whole numerator or denominator are left
+    /// out, since the bar already groups it. Returns null when every cell is empty.
+    /// </summary>
+    public static MathNode? Layout(IReadOnlyList<Cell> cells)
+    {
+        var steps = Build(cells, cells.Count);
+        return steps.Count == 0 ? null : Layout(steps);
+    }
+
+    /// <summary>
+    /// What the bracket button on cell <paramref name="index"/> moves to on the
+    /// next click. It cycles none → ( → ), except that while a bracket above
+    /// this cell is still open it offers the closing one first: none → ) → (.
+    /// </summary>
+    public static Bracket NextBracket(IReadOnlyList<Cell> cells, int index)
+    {
+        int open = 0;
+        for (int i = 0; i < index; i++)
+        {
+            if (cells[i].Bracket == Bracket.Open) open++;
+            else if (cells[i].Bracket == Bracket.Close && open > 0) open--;
+        }
+        Bracket[] order = open > 0
+            ? [Bracket.None, Bracket.Close, Bracket.Open]
+            : [Bracket.None, Bracket.Open, Bracket.Close];
+        return order[(Array.IndexOf(order, cells[index].Bracket) + 1) % order.Length];
+    }
 
     // Builds the tree from the first `count` cells. Brackets still open at the
     // end close there.
@@ -183,6 +230,59 @@ public static class ChainEngine
         }
         return expression;
     }
+
+    // Builds the display layout for one sum (the whole calculation or one
+    // bracket): + and − separate terms; within a term × joins factors side by
+    // side and ÷ puts everything so far in the term over the divisor.
+    private static MathNode Layout(List<Step> steps)
+    {
+        var row = new List<MathNode>();
+        MathNode? term = null;
+        foreach (var step in steps)
+        {
+            if (term is null)
+            {
+                // The sum starts at 0: "+ 7" is 7, "− 7" is −7, and × or ÷ act
+                // on the 0, so it's shown.
+                if (step.Operation == Operation.Add) { term = LayoutOperand(step.Term, afterOperator: false); continue; }
+                if (step.Operation == Operation.Subtract)
+                {
+                    row.Add(new MathText("−", IsOperator: true));
+                    term = LayoutOperand(step.Term, afterOperator: true);
+                    continue;
+                }
+                term = new MathText("0");
+            }
+
+            switch (step.Operation)
+            {
+                case Operation.Add or Operation.Subtract:
+                    row.Add(term);
+                    row.Add(new MathText(step.Operation.Symbol(), IsOperator: true));
+                    term = LayoutOperand(step.Term, afterOperator: true);
+                    break;
+                case Operation.Multiply:
+                    var factor = LayoutOperand(step.Term, afterOperator: true);
+                    var sign = new MathText("×", IsOperator: true);
+                    term = term is MathRow r ? new MathRow([.. r.Items, sign, factor]) : new MathRow([term, sign, factor]);
+                    break;
+                case Operation.Divide:
+                    term = new MathFraction(Unbracketed(term), Unbracketed(LayoutOperand(step.Term, afterOperator: false)));
+                    break;
+            }
+        }
+        row.Add(term!);
+        return row.Count == 1 ? row[0] : new MathRow(row);
+    }
+
+    private static MathNode LayoutOperand(Term term, bool afterOperator) => term switch
+    {
+        NumberTerm n => new MathText(afterOperator ? Bracketed(FormatOperand(n.Text)) : FormatOperand(n.Text)),
+        GroupTerm g => new MathBrackets(Layout(g.Steps)),
+        _ => throw new ArgumentOutOfRangeException(nameof(term)),
+    };
+
+    private static MathNode Unbracketed(MathNode node) => node is MathBrackets b ? b.Inner : node;
 
     // Numbers are tidied the same way as results ("5.0" → "5") with a proper
     // minus sign; anything that doesn't parse is shown as the user typed it.

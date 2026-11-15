@@ -70,9 +70,10 @@ internal static class Program
         {
             for (int c = 0; c < cells[i].Clicks; c++) opButtons[i].RaiseEvent(click);
 
+            // The bracket button's order depends on the cells above, so click until it shows the wanted one.
             string text = cells[i].Text;
-            int bracketClicks = text.StartsWith('(') ? 1 : text.EndsWith(')') ? 2 : 0;   // none → ( → )
-            for (int c = 0; c < bracketClicks; c++) bracketButtons[i].RaiseEvent(click);
+            string bracket = text.StartsWith('(') ? "(" : text.EndsWith(')') ? ")" : "";
+            for (int c = 0; c < 3 && (string)bracketButtons[i].Content != bracket; c++) bracketButtons[i].RaiseEvent(click);
             boxes[i].Text = text.Trim('(', ')');
         }
         // Let layout and rendering catch up before the window is captured.

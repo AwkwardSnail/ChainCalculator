@@ -171,10 +171,71 @@ public class ChainEngineTests
     }
 
     [Fact]
-    public void BracketButtonCyclesThroughAllThree()
+    public void BracketButtonOffersOpenFirstWhenNothingIsOpen()
     {
-        Assert.Equal(Bracket.Open, Bracket.None.Next());
-        Assert.Equal(Bracket.Close, Bracket.Open.Next());
-        Assert.Equal(Bracket.None, Bracket.Close.Next());
+        var cells = Bracketed((Add, Bracket.None, "1"), (Add, Bracket.None, "2"));
+        Assert.Equal(Bracket.Open, ChainEngine.NextBracket(cells, 1));
+        cells[1] = cells[1] with { Bracket = Bracket.Open };
+        Assert.Equal(Bracket.Close, ChainEngine.NextBracket(cells, 1));
+        cells[1] = cells[1] with { Bracket = Bracket.Close };
+        Assert.Equal(Bracket.None, ChainEngine.NextBracket(cells, 1));
+    }
+
+    [Fact]
+    public void BracketButtonOffersCloseFirstBelowAnOpenBracket()
+    {
+        var cells = Bracketed((Add, Bracket.Open, "1"), (Add, Bracket.None, "2"), (Add, Bracket.None, "3"));
+        Assert.Equal(Bracket.Close, ChainEngine.NextBracket(cells, 2));
+        cells[2] = cells[2] with { Bracket = Bracket.Close };
+        Assert.Equal(Bracket.Open, ChainEngine.NextBracket(cells, 2));
+        cells[2] = cells[2] with { Bracket = Bracket.Open };
+        Assert.Equal(Bracket.None, ChainEngine.NextBracket(cells, 2));
+
+        // Once the bracket above is closed, ( comes first again.
+        cells = Bracketed((Add, Bracket.Open, "1"), (Add, Bracket.Close, "2"), (Add, Bracket.None, "3"));
+        Assert.Equal(Bracket.Open, ChainEngine.NextBracket(cells, 2));
+    }
+
+    // Writes a layout as text with fractions as [numerator / denominator].
+    private static string Describe(MathNode? node) => node switch
+    {
+        null => "",
+        MathText t => t.Text,
+        MathRow r => string.Join(" ", r.Items.Select(Describe)),
+        MathBrackets b => $"({Describe(b.Inner)})",
+        MathFraction f => $"[{Describe(f.Numerator)} / {Describe(f.Denominator)}]",
+        _ => throw new ArgumentOutOfRangeException(nameof(node)),
+    };
+
+    private static string Laid(params (Operation Op, Bracket Bracket, string Text)[] cells) =>
+        Describe(ChainEngine.Layout(Bracketed(cells)));
+
+    [Fact]
+    public void LayoutShowsDivisionsAsFractions()
+    {
+        Assert.Equal("1 + 1 + [1 / 2]", Laid((Add, Bracket.None, "1"), (Add, Bracket.None, "1"), (Add, Bracket.None, "1"), (Divide, Bracket.None, "2")));
+        // The numerator is the whole product since the last + or −.
+        Assert.Equal("10 + [5 × 3 / 9]", Laid((Add, Bracket.None, "10"), (Add, Bracket.None, "5"), (Multiply, Bracket.None, "3"), (Divide, Bracket.None, "9")));
+        // Dividing again divides the fraction; multiplying after sits beside it.
+        Assert.Equal("[[8 / 2] / 2] × 3", Laid((Add, Bracket.None, "8"), (Divide, Bracket.None, "2"), (Divide, Bracket.None, "2"), (Multiply, Bracket.None, "3")));
+        Assert.Equal("", Laid((Add, Bracket.None, "")));
+    }
+
+    [Fact]
+    public void LayoutDropsBracketsTheFractionBarAlreadyShows()
+    {
+        // 240 ÷ (4 + 2): the bar groups 4 + 2, so no brackets.
+        Assert.Equal("[240 / 4 + 2] − 15", Laid((Add, Bracket.None, "240"), (Divide, Bracket.Open, "4"), (Add, Bracket.Close, "2"), (Subtract, Bracket.None, "15")));
+        Assert.Equal("[1 + 1 + 1 / 2]", Laid((Add, Bracket.Open, "1"), (Add, Bracket.None, "1"), (Add, Bracket.Close, "1"), (Divide, Bracket.None, "2")));
+        // Brackets that don't wrap a whole numerator or denominator stay.
+        Assert.Equal("[(2 + 3) × 4 / 5]", Laid((Add, Bracket.Open, "2"), (Add, Bracket.Close, "3"), (Multiply, Bracket.None, "4"), (Divide, Bracket.None, "5")));
+    }
+
+    [Fact]
+    public void LayoutKeepsTheStartingZeroAndNegativeBrackets()
+    {
+        Assert.Equal("[0 / 7]", Laid((Divide, Bracket.None, "7")));
+        Assert.Equal("− 7 × 2", Laid((Subtract, Bracket.None, "7"), (Multiply, Bracket.None, "2")));
+        Assert.Equal("[10 / −3] − (−1)", Laid((Add, Bracket.None, "10"), (Divide, Bracket.None, "-3"), (Subtract, Bracket.None, "-1")));
     }
 }

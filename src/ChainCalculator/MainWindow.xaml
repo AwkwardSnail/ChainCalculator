@@ -40,13 +40,11 @@
                 <TextBlock FontWeight="Bold" Text="Result" />
             </DockPanel>
 
-            <!-- The whole chain as one expression; wraps if it's long. -->
-            <TextBlock x:Name="ExpressionText"
+            <!-- The whole calculation, divisions as fractions; wraps between terms if it's long. -->
+            <WrapPanel x:Name="ExpressionPanel"
                        Margin="0,8,0,0"
-                       FontSize="18pt"
-                       TextAlignment="Left"
-                       TextWrapping="Wrap"
-                       Foreground="{StaticResource GreenDimBrush}"
+                       MinHeight="32"
+                       TextElement.FontSize="18pt"
                        AutomationProperties.Name="Calculation" />
 
             <StackPanel Margin="0,16,0,0" HorizontalAlignment="Right" Orientation="Horizontal">
