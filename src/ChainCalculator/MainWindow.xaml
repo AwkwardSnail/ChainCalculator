@@ -18,7 +18,7 @@
             BorderThickness="1"
             CornerRadius="8">
         <StackPanel>
-            <Border Style="{StaticResource Row}" BorderBrush="{StaticResource GreenDimBrush}" TextElement.FontSize="12pt" TextElement.Foreground="{StaticResource GreenDimBrush}">
+            <Border Style="{StaticResource Row}" BorderBrush="{StaticResource GreenDimBrush}" TextElement.FontSize="16pt" TextElement.Foreground="{StaticResource GreenDimBrush}">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="56" />
