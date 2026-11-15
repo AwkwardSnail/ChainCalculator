@@ -22,12 +22,14 @@
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="56" />
+                        <ColumnDefinition Width="64" />
                         <ColumnDefinition Width="2*" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
                     <TextBlock Grid.Column="0" Text="OP" />
-                    <TextBlock Grid.Column="1" Margin="12,0,0,0" Text="VALUE" />
-                    <TextBlock Grid.Column="2" HorizontalAlignment="Right" Text="RUNNING" />
+                    <TextBlock Grid.Column="1" Margin="8,0,0,0" Text="( )" />
+                    <TextBlock Grid.Column="2" Margin="12,0,0,0" Text="VALUE" />
+                    <TextBlock Grid.Column="3" HorizontalAlignment="Right" Text="RUNNING" />
                 </Grid>
             </Border>
 
@@ -40,9 +42,9 @@
 
             <!-- The whole chain as one expression; wraps if it's long. -->
             <TextBlock x:Name="ExpressionText"
-                       Margin="0,6,0,0"
-                       FontSize="14pt"
-                       TextAlignment="Right"
+                       Margin="0,8,0,0"
+                       FontSize="18pt"
+                       TextAlignment="Left"
                        TextWrapping="Wrap"
                        Foreground="{StaticResource GreenDimBrush}"
                        AutomationProperties.Name="Calculation" />

@@ -35,28 +35,60 @@ public static class OperationExtensions
     };
 }
 
-public readonly record struct Cell(Operation Operation, string Text);
+/// <summary>A cell's bracket button: nothing, an opening "(" or a closing ")".</summary>
+public enum Bracket
+{
+    None,
+    Open,
+    Close,
+}
+
+public static class BracketExtensions
+{
+    public static string Symbol(this Bracket bracket) => bracket switch
+    {
+        Bracket.None => "",
+        Bracket.Open => "(",
+        Bracket.Close => ")",
+        _ => throw new ArgumentOutOfRangeException(nameof(bracket)),
+    };
+
+    /// <summary>The bracket the button moves to on the next click.</summary>
+    public static Bracket Next(this Bracket bracket) =>
+        (Bracket)(((int)bracket + 1) % Enum.GetValues<Bracket>().Length);
+}
+
+public readonly record struct Cell(Operation Operation, string Text, Bracket Bracket = Bracket.None);
 
 /// <summary>
 /// Evaluates a chain of cells. The chain starts at 0 and each cell applies its
-/// operation to the running result of the cells above it. NaN marks an error
+/// operation to the running result of the cells above it. A cell with "(" starts
+/// a bracket: its operation is held back and applied to the result of the
+/// bracket, which starts from that cell's number and runs until a cell with ")"
+/// or, if there is none, the end of the chain. Brackets can nest. A ")" with no
+/// open bracket, and brackets on empty cells, are ignored. NaN marks an error
 /// (bad input or division by zero) and carries through to the end of the chain.
 /// </summary>
 public static class ChainEngine
 {
-    /// <summary>Returns the running result after each cell; the last one is the final result.</summary>
+    // The chain as a tree: each group is a list of steps, and a step's term is
+    // either a number (the cell's text) or a bracketed group.
+    private abstract record Term;
+    private sealed record NumberTerm(string Text) : Term;
+    private sealed record GroupTerm(List<Step> Steps) : Term;
+    private sealed record Step(Operation Operation, Term Term);
+
+    /// <summary>
+    /// Returns the running result after each cell; the last one is the final
+    /// result. Inside an open bracket, a cell's running result is what the chain
+    /// would give if the bracket closed at that cell.
+    /// </summary>
     public static IReadOnlyList<double> Evaluate(IReadOnlyList<Cell> cells)
     {
         var running = new double[cells.Count];
-        double result = 0;
         for (int i = 0; i < cells.Count; i++)
         {
-            // Empty cells pass the running result through unchanged.
-            if (!string.IsNullOrWhiteSpace(cells[i].Text))
-            {
-                result = cells[i].Operation.Apply(result, Parse(cells[i].Text));
-            }
-            running[i] = result;
+            running[i] = Evaluate(Build(cells, i + 1));
         }
         return running;
     }
@@ -64,37 +96,89 @@ public static class ChainEngine
     /// <summary>
     /// Writes the chain as one expression, e.g. "(10 + 5) × 3 ÷ 9". The chain
     /// works top to bottom, but ordinary maths does × and ÷ before + and −, so
-    /// the part above a × or ÷ is bracketed whenever it ends in + or −; that way
-    /// the expression gives the same answer read either way. Empty cells are
-    /// left out; text that isn't a number is shown as typed. Returns "" when
-    /// every cell is empty.
+    /// the part before a × or ÷ is bracketed whenever it ends in + or −; that way
+    /// the expression gives the same answer read either way. The user's own
+    /// brackets are always shown. Empty cells are left out; text that isn't a
+    /// number is shown as typed. Returns "" when every cell is empty.
     /// </summary>
-    public static string Expression(IReadOnlyList<Cell> cells)
+    public static string Expression(IReadOnlyList<Cell> cells) => Render(Build(cells, cells.Count));
+
+    // Builds the tree from the first `count` cells. Brackets still open at the
+    // end close there.
+    private static List<Step> Build(IReadOnlyList<Cell> cells, int count)
+    {
+        var top = new List<Step>();
+        var open = new Stack<List<Step>>();
+        open.Push(top);
+        for (int i = 0; i < count; i++)
+        {
+            var cell = cells[i];
+            if (string.IsNullOrWhiteSpace(cell.Text)) continue;
+            var number = new NumberTerm(cell.Text);
+
+            if (cell.Bracket == Bracket.Open)
+            {
+                // The bracket starts from this cell's number; this cell's
+                // operation applies to the bracket as a whole.
+                var inner = new List<Step> { new(Operation.Add, number) };
+                open.Peek().Add(new Step(cell.Operation, new GroupTerm(inner)));
+                open.Push(inner);
+            }
+            else
+            {
+                open.Peek().Add(new Step(cell.Operation, number));
+                if (cell.Bracket == Bracket.Close && open.Count > 1) open.Pop();
+            }
+        }
+        return top;
+    }
+
+    private static double Evaluate(List<Step> steps)
+    {
+        double result = 0;
+        foreach (var step in steps)
+        {
+            double value = step.Term switch
+            {
+                NumberTerm n => Parse(n.Text),
+                GroupTerm g => Evaluate(g.Steps),
+                _ => throw new ArgumentOutOfRangeException(nameof(steps)),
+            };
+            result = step.Operation.Apply(result, value);
+        }
+        return result;
+    }
+
+    private static string Render(List<Step> steps)
     {
         string expression = "";
         bool endsInAddOrSubtract = false;
-        foreach (var cell in cells)
+        foreach (var step in steps)
         {
-            if (string.IsNullOrWhiteSpace(cell.Text)) continue;
-            string operand = FormatOperand(cell.Text);
-            bool addOrSubtract = cell.Operation is Operation.Add or Operation.Subtract;
+            string operand = step.Term switch
+            {
+                NumberTerm n => FormatOperand(n.Text),
+                GroupTerm g => $"({Render(g.Steps)})",
+                _ => throw new ArgumentOutOfRangeException(nameof(steps)),
+            };
+            bool addOrSubtract = step.Operation is Operation.Add or Operation.Subtract;
 
             if (expression.Length == 0)
             {
-                // The chain starts at 0: "+ 7" is just 7 and "− 7" is −7, but
-                // × and ÷ act on that 0, so it has to be shown.
-                expression = cell.Operation switch
+                // Each chain (and each bracket) starts at 0: "+ 7" is just 7 and
+                // "− 7" is −7, but × and ÷ act on that 0, so it has to be shown.
+                expression = step.Operation switch
                 {
                     Operation.Add => operand,
                     Operation.Subtract => "−" + Bracketed(operand),
-                    _ => $"0 {cell.Operation.Symbol()} {Bracketed(operand)}",
+                    _ => $"0 {step.Operation.Symbol()} {Bracketed(operand)}",
                 };
                 endsInAddOrSubtract = false;
                 continue;
             }
 
             if (!addOrSubtract && endsInAddOrSubtract) expression = $"({expression})";
-            expression = $"{expression} {cell.Operation.Symbol()} {Bracketed(operand)}";
+            expression = $"{expression} {step.Operation.Symbol()} {Bracketed(operand)}";
             endsInAddOrSubtract = addOrSubtract;
         }
         return expression;

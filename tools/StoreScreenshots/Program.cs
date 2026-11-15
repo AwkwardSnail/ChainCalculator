@@ -23,6 +23,7 @@ internal static class Program
     private sealed record Shot(string FileName, string Caption, (int Clicks, string Text)[] Cells);
 
     // Clicks is how many times to press a cell's operation button: 0 +, 1 −, 2 ×, 3 ÷.
+    // Text starting with "(" or ending with ")" sets that cell's bracket button instead.
     private static readonly Shot[] Shots =
     [
         new("01-chain.png", "Every cell picks its own operation",
@@ -31,6 +32,8 @@ internal static class Program
             [(0, "1200"), (3, "12"), (2, "1.1"), (0, "25"), (1, "35")]),
         new("03-decimals.png", "Five cells, one result",
             [(0, "19.99"), (2, "3"), (1, "4.97"), (3, "2"), (0, "0.5")]),
+        new("04-brackets.png", "Brackets when you need them",
+            [(0, "240"), (3, "(4"), (0, "2)"), (1, "15"), (0, "")]),
     ];
 
     [STAThread]
@@ -60,14 +63,17 @@ internal static class Program
     private static void Fill(MainWindow window, (int Clicks, string Text)[] cells)
     {
         var boxes = Descendants<TextBox>(window).ToList();
-        var opButtons = Descendants<Button>(window).Where(b => b.Name != "ClearButton").ToList();
+        var opButtons = Descendants<Button>(window).Where(b => "Operation".Equals(b.Tag)).ToList();
+        var bracketButtons = Descendants<Button>(window).Where(b => "Bracket".Equals(b.Tag)).ToList();
+        var click = new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent);
         for (int i = 0; i < cells.Length; i++)
         {
-            for (int c = 0; c < cells[i].Clicks; c++)
-            {
-                opButtons[i].RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
-            }
-            boxes[i].Text = cells[i].Text;
+            for (int c = 0; c < cells[i].Clicks; c++) opButtons[i].RaiseEvent(click);
+
+            string text = cells[i].Text;
+            int bracketClicks = text.StartsWith('(') ? 1 : text.EndsWith(')') ? 2 : 0;   // none → ( → )
+            for (int c = 0; c < bracketClicks; c++) bracketButtons[i].RaiseEvent(click);
+            boxes[i].Text = text.Trim('(', ')');
         }
         // Let layout and rendering catch up before the window is captured.
         window.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.ApplicationIdle);

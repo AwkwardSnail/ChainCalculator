@@ -8,9 +8,10 @@ public partial class MainWindow : Window
 {
     private const int CellCount = 5;
 
-    private sealed record Row(Button OperationButton, TextBox Input, TextBlock Running)
+    private sealed record Row(Button OperationButton, Button BracketButton, TextBox Input, TextBlock Running)
     {
         public Operation Operation { get; set; } = Operation.Add;
+        public Bracket Bracket { get; set; } = Bracket.None;
     }
 
     private readonly List<Row> _rows = [];
@@ -32,10 +33,21 @@ public partial class MainWindow : Window
     {
         var grid = new Grid();
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(56) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(64) }); // 8 gap + 56 button
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(2, GridUnitType.Star) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
-        var button = new Button { Style = (Style)FindResource("OperationButton"), Content = Operation.Add.Symbol() };
+        var button = new Button { Style = (Style)FindResource("OperationButton"), Content = Operation.Add.Symbol(), Tag = "Operation" };
+        button.SetValue(System.Windows.Automation.AutomationProperties.NameProperty, $"Operation, cell {index + 1}");
+        var bracketButton = new Button
+        {
+            Style = (Style)FindResource("OperationButton"),
+            Margin = new Thickness(8, 0, 0, 0),
+            Content = Bracket.None.Symbol(),
+            Tag = "Bracket",
+            ToolTip = "Bracket: none, ( or )",
+        };
+        bracketButton.SetValue(System.Windows.Automation.AutomationProperties.NameProperty, $"Bracket, cell {index + 1}");
         var input = new TextBox { Style = (Style)FindResource("ValueBox") };
         input.SetValue(System.Windows.Automation.AutomationProperties.NameProperty, $"Cell {index + 1}");
         var running = new TextBlock
@@ -46,19 +58,27 @@ public partial class MainWindow : Window
         };
 
         Grid.SetColumn(button, 0);
-        Grid.SetColumn(input, 1);
-        Grid.SetColumn(running, 2);
+        Grid.SetColumn(bracketButton, 1);
+        Grid.SetColumn(input, 2);
+        Grid.SetColumn(running, 3);
         grid.Children.Add(button);
+        grid.Children.Add(bracketButton);
         grid.Children.Add(input);
         grid.Children.Add(running);
 
         RowsPanel.Children.Add(new Border { Style = (Style)FindResource("Row"), Child = grid });
 
-        var row = new Row(button, input, running);
+        var row = new Row(button, bracketButton, input, running);
         button.Click += (_, _) =>
         {
             row.Operation = row.Operation.Next();
             button.Content = row.Operation.Symbol();
+            Recalculate();
+        };
+        bracketButton.Click += (_, _) =>
+        {
+            row.Bracket = row.Bracket.Next();
+            bracketButton.Content = row.Bracket.Symbol();
             Recalculate();
         };
         input.TextChanged += (_, _) => Recalculate();
@@ -67,7 +87,7 @@ public partial class MainWindow : Window
 
     private void Recalculate()
     {
-        var cells = _rows.Select(r => new Cell(r.Operation, r.Input.Text)).ToList();
+        var cells = _rows.Select(r => new Cell(r.Operation, r.Input.Text, r.Bracket)).ToList();
         var running = ChainEngine.Evaluate(cells);
         var green = (Brush)FindResource("GreenBrush");
         var greenDim = (Brush)FindResource("GreenDimBrush");
@@ -96,6 +116,8 @@ public partial class MainWindow : Window
         {
             row.Operation = Operation.Add;
             row.OperationButton.Content = Operation.Add.Symbol();
+            row.Bracket = Bracket.None;
+            row.BracketButton.Content = Bracket.None.Symbol();
             row.Input.Text = string.Empty;
         }
         Recalculate();

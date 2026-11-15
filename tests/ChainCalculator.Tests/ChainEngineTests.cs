@@ -110,4 +110,60 @@ public class ChainEngineTests
         Assert.Equal("12 ÷ 0", Expr((Add, "12"), (Divide, "0")));
         Assert.Equal("4 + abc", Expr((Add, "4"), (Add, " abc ")));
     }
+
+    private static List<Cell> Bracketed(params (Operation Op, Bracket Bracket, string Text)[] cells) =>
+        cells.Select(c => new Cell(c.Op, c.Text, c.Bracket)).ToList();
+
+    [Fact]
+    public void BracketGroupsTheCellsBelowIt()
+    {
+        // 10 ÷ (2 + 3), not 10 ÷ 2 + 3.
+        var cells = Bracketed((Add, Bracket.None, "10"), (Divide, Bracket.Open, "2"), (Add, Bracket.Close, "3"), (Add, Bracket.None, "1"));
+        Assert.Equal([10, 5, 2, 3], ChainEngine.Evaluate(cells));
+        Assert.Equal("10 ÷ (2 + 3) + 1", ChainEngine.Expression(cells));
+    }
+
+    [Fact]
+    public void OpenBracketClosesAtTheEndUnlessClosedEarlier()
+    {
+        var cells = Bracketed((Add, Bracket.None, "100"), (Subtract, Bracket.Open, "10"), (Add, Bracket.None, "5"), (Multiply, Bracket.None, "2"));
+        // 100 − ((10 + 5) × 2) = 70
+        Assert.Equal(70, ChainEngine.Evaluate(cells)[^1]);
+        Assert.Equal("100 − ((10 + 5) × 2)", ChainEngine.Expression(cells));
+    }
+
+    [Fact]
+    public void BracketsNest()
+    {
+        var cells = Bracketed((Add, Bracket.None, "1"), (Divide, Bracket.Open, "2"), (Add, Bracket.None, "3"),
+            (Divide, Bracket.Open, "4"), (Add, Bracket.Close, "4"));
+        // 1 ÷ (2 + 3 ÷ (4 + 4)): the inner bracket closes at the last cell, the outer at the end.
+        Assert.Equal(1 / (5 / 8.0), ChainEngine.Evaluate(cells)[^1], 12);
+        Assert.Equal("1 ÷ ((2 + 3) ÷ (4 + 4))", ChainEngine.Expression(cells));
+    }
+
+    [Fact]
+    public void StrayBracketsAreIgnored()
+    {
+        // A ")" with nothing open, and a "(" on an empty cell, change nothing.
+        var cells = Bracketed((Add, Bracket.Close, "6"), (Multiply, Bracket.Open, ""), (Add, Bracket.None, "2"));
+        Assert.Equal([6, 6, 8], ChainEngine.Evaluate(cells));
+        Assert.Equal("6 + 2", ChainEngine.Expression(cells));
+    }
+
+    [Fact]
+    public void DivisionByZeroInsideABracketIsAnError()
+    {
+        var cells = Bracketed((Add, Bracket.None, "9"), (Divide, Bracket.Open, "2"), (Subtract, Bracket.Close, "2"));
+        Assert.True(double.IsNaN(ChainEngine.Evaluate(cells)[^1]));
+        Assert.Equal("9 ÷ (2 − 2)", ChainEngine.Expression(cells));
+    }
+
+    [Fact]
+    public void BracketButtonCyclesThroughAllThree()
+    {
+        Assert.Equal(Bracket.Open, Bracket.None.Next());
+        Assert.Equal(Bracket.Close, Bracket.Open.Next());
+        Assert.Equal(Bracket.None, Bracket.Close.Next());
+    }
 }
