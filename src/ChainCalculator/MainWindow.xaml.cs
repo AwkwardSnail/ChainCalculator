@@ -107,18 +107,15 @@ public partial class MainWindow : Window
         ResultText.Text = ChainEngine.Format(result);
         ResultText.Foreground = double.IsNaN(result) ? error : green;
 
-        // Copy results pastes as one line of text, e.g. "240 ÷ (4 + 2) − 15 = 25";
-        // on screen the same calculation shows divisions as fractions.
+        // On screen divisions show as fractions; screen readers get the one-line form.
         string expression = ChainEngine.Expression(cells);
-        _copyText = expression.Length == 0 ? ResultText.Text : $"{expression} = {ChainEngine.Format(result)}";
         ShowExpression(ChainEngine.Layout(cells), result, double.IsNaN(result) ? error : greenDim);
-        System.Windows.Automation.AutomationProperties.SetName(ExpressionPanel, expression.Length == 0 ? "Calculation" : _copyText);
+        System.Windows.Automation.AutomationProperties.SetName(ExpressionPanel,
+            expression.Length == 0 ? "Calculation" : $"{expression} = {ChainEngine.Format(result)}");
 
         // "Copied" only describes what's on the clipboard until something changes.
-        CopyButton.Content = "Copy results";
+        CopyButton.Content = "Copy result";
     }
-
-    private string _copyText = "0";
 
     // Shows "<layout> = <result>". The top-level terms go straight into the
     // wrap panel so a long calculation wraps between them.
@@ -171,7 +168,10 @@ public partial class MainWindow : Window
 
     private void CopyButton_Click(object sender, RoutedEventArgs e)
     {
-        string text = _copyText;
+        // Just the number, exactly as shown next to Result (e.g. "0.5"). An
+        // error isn't a number, so there's nothing to copy.
+        string text = ResultText.Text;
+        if (text == "Error") return;
         try
         {
             Clipboard.SetDataObject(text, copy: true);

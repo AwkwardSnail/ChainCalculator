@@ -52,8 +52,8 @@
                         Margin="0,0,12,0"
                         MinWidth="150"
                         Style="{StaticResource ClearButton}"
-                        Content="Copy results"
-                        ToolTip="Copy the calculation and result"
+                        Content="Copy result"
+                        ToolTip="Copy the result"
                         Click="CopyButton_Click" />
                 <Button x:Name="ClearButton"
                         Style="{StaticResource ClearButton}"

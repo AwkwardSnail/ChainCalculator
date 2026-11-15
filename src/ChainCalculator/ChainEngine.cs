@@ -234,14 +234,13 @@ public static class ChainEngine
     }
 
     // Builds the display layout for one sum (the whole calculation or one
-    // bracket): + and − separate terms. Within a term, everything multiplied
-    // goes on top and everything divided by goes underneath, as one fraction:
-    // a × b ÷ c ÷ d shows as a × b over c × d, never a tower of fractions.
+    // bracket): + and − separate terms; within a term × joins factors side by
+    // side and each ÷ puts everything so far in the term over the divisor, so
+    // 1 ÷ 1 ÷ 1 shows as a stack of divisions in the order they were entered.
     private static MathNode Layout(List<Step> steps)
     {
         var row = new List<MathNode>();
-        var top = new List<MathNode>();
-        var bottom = new List<MathNode>();
+        MathNode? term = null;
         for (int i = 0; i < steps.Count; i++)
         {
             var step = steps[i];
@@ -249,37 +248,30 @@ public static class ChainEngine
             {
                 // The first number starts the sum; only a − is shown.
                 if (step.Operation == Operation.Subtract) row.Add(new MathText("−", IsOperator: true));
-                top.Add(LayoutOperand(step.Term, afterOperator: step.Operation == Operation.Subtract));
+                term = LayoutOperand(step.Term, afterOperator: step.Operation == Operation.Subtract);
                 continue;
             }
 
             switch (step.Operation)
             {
                 case Operation.Add or Operation.Subtract:
-                    row.Add(TermLayout(top, bottom));
+                    row.Add(term!);
                     row.Add(new MathText(step.Operation.Symbol(), IsOperator: true));
-                    top = [LayoutOperand(step.Term, afterOperator: true)];
-                    bottom = [];
+                    term = LayoutOperand(step.Term, afterOperator: true);
                     break;
                 case Operation.Multiply:
-                    top.Add(LayoutOperand(step.Term, afterOperator: true));
+                    var factor = LayoutOperand(step.Term, afterOperator: true);
+                    var sign = new MathText("×", IsOperator: true);
+                    term = term is MathRow r ? new MathRow([.. r.Items, sign, factor]) : new MathRow([term!, sign, factor]);
                     break;
                 case Operation.Divide:
-                    bottom.Add(LayoutOperand(step.Term, afterOperator: true));
+                    // A lone bracket on top or underneath loses its brackets, since the bar groups it.
+                    term = new MathFraction(Unbracketed(term!), Unbracketed(LayoutOperand(step.Term, afterOperator: true)));
                     break;
             }
         }
-        row.Add(TermLayout(top, bottom));
+        row.Add(term!);
         return row.Count == 1 ? row[0] : new MathRow(row);
-    }
-
-    // One term: its factors joined by ×, as a fraction if anything divides it.
-    // A lone bracket on top or underneath loses its brackets, since the bar
-    // already groups it.
-    private static MathNode TermLayout(List<MathNode> top, List<MathNode> bottom)
-    {
-        if (bottom.Count == 0) return Product(top);
-        return new MathFraction(Unbracketed(Product(top)), Unbracketed(Product(bottom)));
     }
 
     // A lone negative number under the bar needs no brackets: "−3", not "(−3)".
@@ -289,18 +281,6 @@ public static class ChainEngine
         MathText { IsOperator: false } t when t.Text.StartsWith("(−") || t.Text.StartsWith("(-") => t with { Text = t.Text[1..^1] },
         _ => node,
     };
-
-    private static MathNode Product(List<MathNode> factors)
-    {
-        if (factors.Count == 1) return factors[0];
-        var items = new List<MathNode>();
-        foreach (var factor in factors)
-        {
-            if (items.Count > 0) items.Add(new MathText("×", IsOperator: true));
-            items.Add(factor);
-        }
-        return new MathRow(items);
-    }
 
     private static MathNode LayoutOperand(Term term, bool afterOperator) => term switch
     {

@@ -35,7 +35,8 @@ public class ChainEngineTests
             (Add, Bracket.Close, "1"), (Divide, Bracket.None, "1"));
         Assert.Equal([1, 1, 1, 0.5, 0.5], ChainEngine.Evaluate(cells));
         Assert.Equal("1 ÷ 1 ÷ (1 + 1) ÷ 1", ChainEngine.Expression(cells));
-        Assert.Equal("[1 / 1 × (1 + 1) × 1]", Describe(ChainEngine.Layout(cells)));
+        // Each division stacks on the last, in the order entered.
+        Assert.Equal("[[[1 / 1] / 1 + 1] / 1]", Describe(ChainEngine.Layout(cells)));
     }
 
     [Fact]
@@ -230,8 +231,8 @@ public class ChainEngineTests
         Assert.Equal("1 + 1 + [1 / 2]", Laid((Add, Bracket.None, "1"), (Add, Bracket.None, "1"), (Add, Bracket.None, "1"), (Divide, Bracket.None, "2")));
         // The numerator is the whole product since the last + or −.
         Assert.Equal("10 + [5 × 3 / 9]", Laid((Add, Bracket.None, "10"), (Add, Bracket.None, "5"), (Multiply, Bracket.None, "3"), (Divide, Bracket.None, "9")));
-        // Every divisor in a term goes on one denominator; every factor on top.
-        Assert.Equal("[8 × 3 / 2 × 2]", Laid((Add, Bracket.None, "8"), (Divide, Bracket.None, "2"), (Divide, Bracket.None, "2"), (Multiply, Bracket.None, "3")));
+        // Dividing again stacks another division; multiplying after sits beside it.
+        Assert.Equal("[[8 / 2] / 2] × 3", Laid((Add, Bracket.None, "8"), (Divide, Bracket.None, "2"), (Divide, Bracket.None, "2"), (Multiply, Bracket.None, "3")));
         Assert.Equal("", Laid((Add, Bracket.None, "")));
     }
 
@@ -249,7 +250,7 @@ public class ChainEngineTests
     public void LayoutKeepsTheStartingZeroAndNegativeBrackets()
     {
         Assert.Equal("7", Laid((Divide, Bracket.None, "7")));
-        Assert.Equal("[6 / 2 × (−3)]", Laid((Add, Bracket.None, "6"), (Divide, Bracket.None, "2"), (Divide, Bracket.None, "-3")));
+        Assert.Equal("[[6 / 2] / −3]", Laid((Add, Bracket.None, "6"), (Divide, Bracket.None, "2"), (Divide, Bracket.None, "-3")));
         Assert.Equal("− 7 × 2", Laid((Subtract, Bracket.None, "7"), (Multiply, Bracket.None, "2")));
         Assert.Equal("[10 / −3] − (−1)", Laid((Add, Bracket.None, "10"), (Divide, Bracket.None, "-3"), (Subtract, Bracket.None, "-1")));
     }
